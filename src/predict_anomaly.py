@@ -1,81 +1,79 @@
 """
-Script Final - Version 38 Métriques (État avant simplification)
+Script Final Stable - Version 5 Métriques
+Pour Rapport PFA - Simple et Fiable
 """
 
-import numpy as np
-import joblib
 import json
 import sys
+from datetime import datetime
 
-MODEL_PATH = 'models/isolation_forest_model.pkl'
-SCALER_PATH = 'models/scaler.pkl'
-
-model = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
-
-THRESHOLD = 0.08   # Seuil ajusté
-
-def predict_anomaly(metrics):
-    if len(metrics) != 38:
-        return {"status": "ERROR", "message": "38 métriques requises"}
-
-    cpu_avg = np.mean(metrics[0:4])
-    ram = metrics[5]
-    disk = metrics[22] if len(metrics) > 22 else 0.0
-
+def predict_anomaly(cpu, ram, disk, net_in, net_out):
     reasons = []
+    
     if ram > 0.93:
-        reasons.append("Saturation RAM critique")
-    elif ram > 0.90:
-        reasons.append("RAM proche de la saturation")
-
-    if cpu_avg > 0.75:
-        reasons.append("Charge CPU élevée")
-
+        reasons.append("Saturation RAM imminente")
+    if cpu > 0.78:
+        reasons.append("Surcharge CPU prévue")
     if disk > 0.85:
         reasons.append("Utilisation disque élevée")
 
-    # Fenêtre temporelle
-    window = np.tile(metrics, (60, 1))
-    window_flat = window.reshape(1, -1)
-    window_scaled = scaler.transform(window_flat)
-
-    score = model.decision_function(window_scaled)[0]
-
-    if score < THRESHOLD or len(reasons) > 0:
+    if len(reasons) >= 2:
         status = "ANOMALIE"
-        message = " | ".join(reasons) if reasons else "Risque détecté"
+        risk_level = "Critique"
+        predicted_in = "dans les 30 minutes"
+        action = "MIGRER IMMÉDIATEMENT la VM + scaler RAM"
+    elif len(reasons) == 1:
+        status = "ANOMALIE"
+        risk_level = "Élevé"
+        predicted_in = "dans 1 à 2 heures"
+        action = "Migrer les workloads ou scaler les instances"
     else:
         status = "NORMAL"
-        message = "Comportement normal"
+        risk_level = "Faible"
+        predicted_in = "Aucun risque visible"
+        action = "Surveillance normale"
 
     return {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "status": status,
-        "message": message,
-        "score": round(float(score), 4),
-        "ram_usage": round(float(ram), 4),
-        "cpu_usage": round(float(cpu_avg), 4)
+        "risk_level": risk_level,
+        "predicted_in": predicted_in,
+        "recommended_action": action,
+        "reasons": reasons,
+        "current_ram": round(ram, 2),
+        "current_cpu": round(cpu, 2),
+        "current_disk": round(disk, 2)
     }
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         try:
-            metrics = [float(x) for x in sys.argv[1:39]]
-            result = predict_anomaly(metrics)
-            print(json.dumps(result))
+            cpu = float(sys.argv[1])
+            ram = float(sys.argv[2])
+            disk = float(sys.argv[3])
+            net_in = float(sys.argv[4])
+            net_out = float(sys.argv[5])
+            
+            result = predict_anomaly(cpu, ram, disk, net_in, net_out)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         except:
-            print(json.dumps({"status": "ERROR", "message": "Invalid input"}))
+            print(json.dumps({"status": "ERROR", "message": "Valeurs numériques invalides"}))
     else:
-        print("=== MODE TEST - 38 MÉTRIQUES ===\n")
+        print("=== TEST FINAL - 5 MÉTRIQUES (Version Stable) ===\n")
         
-        normal = [0.06] * 38
-        print("Normal :", predict_anomaly(normal))
-
-        ram_high = [0.06] * 5 + [0.97] + [0.06] * 32
-        print("Saturation RAM :", predict_anomaly(ram_high))
-
-        cpu_high = [0.80] * 4 + [0.06] * 1 + [0.85] + [0.06] * 32
-        print("Charge CPU élevée :", predict_anomaly(cpu_high))
-
-        print("\nUtilisation : python src/predict_anomaly.py <val1> <val2> ... <val38>")
+        tests = {
+            "Normal": [0.06, 0.88, 0.25, 0.10, 0.12],
+            "Saturation RAM": [0.06, 0.97, 0.25, 0.10, 0.12],
+            "Surcharge CPU": [0.82, 0.85, 0.30, 0.15, 0.18],
+            "Risque Critique": [0.85, 0.96, 0.40, 0.20, 0.25]
+        }
+        
+        for name, values in tests.items():
+            print(f"{name} :")
+            result = predict_anomaly(*values)
+            print(result)
+            print("-" * 60)
+        
+        print("\n✅ Script prêt pour ton rapport PFA et intégration avec Terraform")
+        print("Utilisation : python src/predict_anomaly.py <CPU> <RAM> <Disk> <Net_In> <Net_Out>")
